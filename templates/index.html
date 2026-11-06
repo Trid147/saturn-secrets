@@ -1,0 +1,22 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>One-Time Secret Share</title>
+</head>
+<body>
+    <h1>🔒 Saturn Secrets - Secure One-Time Share</h1>
+
+    <form action="/share" method="post">
+        <label for="secret_data">Enter your secret:</label><br><br>
+        <textarea name="secret_data" id="secret_data" rows="4" cols="50" required></textarea>
+        <button type="submit">Generate Secure Link</button>
+    </form>
+
+    {% if share_link %}
+        <h2>Copy your one-time link:</h2>
+        <input type="text" value="{{ share_link }}" size="60" readonly onclick="this.select();">
+        <p style="color: red;">Warning: Once this link is opened, it will be destroyed forever.</p>
+    {% endif %}
+</body>
+</html>
