@@ -8,6 +8,13 @@
 <body>
     <header>
         <strong>🪐 Saturn Secrets</strong>
+        <a href="/">Create Secret</a>
+        {% if not authorized %}
+            <a href="/login">Login</a>
+            <a href="/register">Register</a>
+        {% else %}
+            <a href="/dashboard">🪐</a>
+        {% endif %}
         <hr>
     </header>
 

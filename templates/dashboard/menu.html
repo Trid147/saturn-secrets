@@ -1,0 +1,12 @@
+{% extends "base.html" %}
+
+{% block content %}
+    <h2>🪐 Welcome to Your Saturn Dashboard, {{ current_user }}!</h2>
+    <p>Select a system directory to manage your assets configuration:</p>
+    
+    <ul>
+        <li><a href="/dashboard/secrets"><b>[ Your Secrets ]</b></a> - View active links and shred them manually.</li>
+        <li><a href="/dashboard/account"><b>[ Account Profile ]</b></a> - Manage user credentials.</li>
+        <li><a href="/dashboard/settings"><b>[ System Settings ]</b></a> - Toggle interface theme configurations.</li>
+    </ul>
+{% endblock %}
