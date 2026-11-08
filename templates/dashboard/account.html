@@ -1,0 +1,13 @@
+{% extends "base.html" %}
+
+{% block content %}
+    <h2>👤 Profile Details</h2>
+    <p>Account Holder: <strong>{{ current_user }}</strong></p>
+    <p>System Privileges: Standard DevSecOps User</p>
+    <p>Password: <a href="/dashboard/change-password">Change password</a></p> 
+
+    <br><br>
+    <a href="/logout"><button style="background-color: #ef4444; color: white; border: none; padding: 10px 20px; cursor: pointer; border-radius: 4px;">Log Out</button></a>
+    
+    <br><br><a href="/dashboard">Back to Menu</a>
+{% endblock %}

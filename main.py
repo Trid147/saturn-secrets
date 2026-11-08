@@ -1,6 +1,7 @@
 from fastapi import Depends, FastAPI, Form, HTTPException, Request
 from cryptography.fernet import Fernet
 from fastapi.responses import HTMLResponse, RedirectResponse
+from fastapi.routing import request_response
 from sqlalchemy.orm import Session
 from dotenv import load_dotenv
 import uvicorn
@@ -78,7 +79,7 @@ def view_secret(request: Request, secret_id: str, db: Session = Depends(get_db))
     return template.render(request=request, secret_text=decrypted_text, authorized=authorized)
 
 @app.get('/register', response_class=HTMLResponse)
-def register(request: Request):
+def auth_register(request: Request):
     authorized = is_auth(request)
 
     if authorized:
@@ -89,7 +90,7 @@ def register(request: Request):
     return template.render(request=request)
 
 @app.get('/login', response_class=HTMLResponse)
-def login(request: Request):
+def auth_login(request: Request):
     authorized = is_auth(request)
 
     if authorized:
@@ -103,20 +104,20 @@ def login(request: Request):
 def handle_registration(request: Request, username: str = Form(...), password: str = Form(...), password_repeat: str = Form(...), db: Session = Depends(get_db)):
     if password != password_repeat:
         template = template_env.get_template('auth/register.html')
-        return template.render(request=request, error='Passwords do not match!')
+        return HTMLResponse(content=template.render(request=request, error='Passwords do not match!'))
 
     if len(password) < 8:
         template = template_env.get_template('auth/register.html') 
-        return template.render(request=request, error='Password must contain at least 8 characters!')
+        return HTMLResponse(content=template.render(request=request, error='Password must contain at least 8 characters!'))
 
     if not username.strip():
         template = template_env.get_template('auth/register.html')
-        return template.render(request=request, error='Username can not be blank!')
+        return HTMLResponse(content=template.render(request=request, error='Username can not be blank!'))
 
     existing_user = db.query(models.User).filter(models.User.username == username).first()
     if existing_user:
         template = template_env.get_template('auth/register.html')
-        return template.render(request=request, error='This user is already registered!')
+        return HTMLResponse(content=template.render(request=request, error='This user is already registered!'))
 
     hashed_password = hash_password(password)
 
@@ -126,22 +127,22 @@ def handle_registration(request: Request, username: str = Form(...), password: s
     db.refresh(new_user)
 
     template = template_env.get_template('auth/login.html')
-    return template.render(request=request, success_message='Account created successsfully! Please log in.')
+    return HTMLResponse(content=template.render(request=request, success_message='Account created successsfully! Please log in.'))
 
-@app.post('/login')
+@app.post('/login', response_class=HTMLResponse)
 def handle_login(request: Request, username: str = Form(...), password: str = Form(...), db: Session = Depends(get_db)):
     if not username.strip():
         template = template_env.get_template('auth/login.html')
-        return template.render(request=request, error='Username can not be blank!')
+        return HTMLResponse(content=template.render(request=request, error='Username can not be blank!'))
 
     existing_user = db.query(models.User).filter(models.User.username == username).first()
     if not existing_user:
         template = template_env.get_template('auth/login.html')
-        return template.render(request=request, error='This user is not registered!')
+        return HTMLResponse(content=template.render(request=request, error='This user is not registered!'))
 
     if not verify_password(password, existing_user.hashed_password): #type: ignore
         template = template_env.get_template('auth/login.html')
-        return template.render(request=request, error='Wrong password! Please, try again.')
+        return HTMLResponse(content=template.render(request=request, error='Wrong password! Please, try again.'))
 
     token = create_access_token(username)
 
@@ -153,21 +154,96 @@ def handle_login(request: Request, username: str = Form(...), password: str = Fo
 
 @app.get('/dashboard', response_class=HTMLResponse)
 def dashboard(request: Request):
-    token = request.cookies.get('session_token')
-    username = verify_access_token(token) if token else None
+    authorized = is_auth(request)
 
-    if not username:
+    if not authorized:
         template = template_env.get_template('auth/login.html')
         return template.render(request=request, error='Unathorized access. Please log in first.')
 
+    token = request.cookies.get('session_token')
+    username = verify_access_token(token) if token else None
+
     template = template_env.get_template('dashboard/menu.html')
-    return template.render(request=request, current_user=username, authorized=True)
+    return template.render(request=request, current_user=username, authorized=authorized)
 
 @app.get('/logout')
 def logout(request: Request):
     response = RedirectResponse('/', status_code=303)
     response.delete_cookie('session_token')
     return response
+
+@app.get('/dashboard/secrets', response_class=HTMLResponse)
+def dashboard_secrets(request: Request):
+    authorized = is_auth(request)
+
+    if not authorized:
+        template = template_env.get_template('auth/login.html')
+        return template.render(request=request, error='Unathorized access. Please log in first.')
+
+    active_secrets = []
+
+    template = template_env.get_template('dashboard/secrets.html')
+    return template.render(request=request, authorized=authorized, secrets=active_secrets)
+
+@app.get('/dashboard/account', response_class=HTMLResponse)
+def dashboard_account(request: Request):
+    authorized = is_auth(request)
+
+    if not authorized:
+        template = template_env.get_template('auth/login.html')
+        return template.render(request=request, error='Unathorized access. Please log in first.')
+
+    token = request.cookies.get('session_token')
+    username = verify_access_token(token) if token else None
+
+    template = template_env.get_template('dashboard/account.html')
+    return template.render(request=request, current_user=username, authorized=authorized)
+
+@app.get('/dashboard/settings', response_class=HTMLResponse)
+def dashboard_settings(request: Request):
+    authorized = is_auth(request)
+
+    if not authorized:
+        template = template_env.get_template('auth/login.html')
+        return template.render(request=request, error='Unathorized access. Please log in first.')
+
+    template = template_env.get_template('dashboard/settings.html')
+    return template.render(request=request, authorized=authorized)
+
+@app.get('/dashboard/change-password')
+def dashboard_password(request: Request):
+    authorized = is_auth(request)
+
+    if not authorized:
+        template = template_env.get_template('auth/login.html')
+        return HTMLResponse(content=template.render(request=request, error='Unathorized access. Please log in first.'))
+
+    template = template_env.get_template('dashboard/password.html')
+    return HTMLResponse(content=template.render(request=request, authorized=authorized))
+
+@app.post('/dashboard/change-password', response_class=HTMLResponse)
+def handle_change_password(request: Request, password: str = Form(...), new_password: str = Form(...), new_password_repeat: str = Form(...), db: Session = Depends(get_db)):
+    template = template_env.get_template('dashboard/password.html')
+
+    token = request.cookies.get('session_token')
+    username = verify_access_token(token) if token else None
+    
+    if not username:
+        login_temp = template_env.get_template('auth/login.html')
+        return HTMLResponse(content=login_temp.render(request=request, error='Something went wrong. Log in again, please.'))
+
+    if new_password != new_password_repeat:
+        return HTMLResponse(content=template.render(request=request, authorized=True, error='New passwords do not match!'))
+    
+    if len(new_password) < 8:
+        return HTMLResponse(content=template.render(request=request, authorized=True, error='New password must contain at least 8 characters!'))
+
+    existing_user = db.query(models.User).filter(models.User.username == username).first()
+    if not verify_password(password, existing_user.hashed_password): #type: ignore
+        return HTMLResponse(content=template.render(request=request, authorized=True, error='Wrong current password! Please try again.'))
+
+    existing_user.hashed_password = hash_password(new_password) #type: ignore
+    return HTMLResponse(content=template.render(request=request, authorized=True, success_message='Password changed successfully.'))
 
 if __name__ == '__main__':
     uvicorn.run('main:app', host='127.0.0.1', port=8000, reload=True)
