@@ -1,9 +1,12 @@
+from datetime import timedelta, datetime, timezone
+from typing import Literal
 from fastapi import Depends, FastAPI, Form, HTTPException, Request
 from cryptography.fernet import Fernet
 from fastapi.responses import HTMLResponse, RedirectResponse
-from fastapi.routing import request_response
+from sqlalchemy import DateTime
 from sqlalchemy.orm import Session
 from dotenv import load_dotenv
+from sqlalchemy.sql.functions import now
 import uvicorn
 import jinja2
 import os
@@ -40,15 +43,28 @@ def home(request: Request):
     return template.render(request=request, authorized=authorized)
 
 @app.post('/share', response_class=HTMLResponse)
-def share_secret(request: Request, secret_data: str = Form(...), db: Session = Depends(get_db)):
+def share_secret(
+    request: Request,
+    secret_data: str = Form(...),
+    lifespan: Literal['burn', '1h', '24h', '7d'] = Form(...),
+    whitelist: str | None = Form(default=None),
+    blacklist: str | None = Form(default=None),
+    db: Session = Depends(get_db)
+):
     if not secret_data.strip():
         raise HTTPException(status_code=400, detail='Status code cannot be empty')
 
+    durations = {'1h': timedelta(hours=1), '24h': timedelta(hours=24), '7d': timedelta(days=7)}
+    expires_at = (None if lifespan == 'burn' else datetime.now(timezone.utc) + durations[lifespan])
+
     authorized = is_auth(request)
+
+    token = request.cookies.get('session_token')
+    username = verify_access_token(token) if token else None
 
     encrypted_data = fernet.encrypt(secret_data.encode('utf-8'))
 
-    db_secret = models.Secret(secret_text=encrypted_data)
+    db_secret = models.Secret(secret_text=encrypted_data, owner_username=username, expires_at=expires_at, whitelist=whitelist, blacklist=blacklist)
     db.add(db_secret)
     db.commit()
     db.refresh(db_secret)
@@ -67,7 +83,44 @@ def view_secret(request: Request, secret_id: str, db: Session = Depends(get_db))
 
     if not db_secret:
         template = template_env.get_template('view.html')
-        return template.render(request=request, error='This secret has already been destroyed or never existed!')
+        return template.render(request=request, error='This secret has already been destroyed or never existed!', authorized=authorized)
+
+    expire_time = db_secret.expires_at
+
+    if expire_time is not None:
+        if expire_time.tzinfo is None:
+            expire_time = expire_time.replace(tzinfo=timezone.utc)
+
+        if expire_time <= datetime.now(timezone.utc): #type: ignore
+            db.delete(db_secret)
+            db.commit()
+            template = template_env.get_template('view.html')
+            return template.render(request=request, error='This secret has expired.', authorized=authorized)
+
+    whitelist = (db_secret.whitelist or '').strip()
+    blacklist = (db_secret.blacklist or '').strip()
+
+    if whitelist and blacklist:
+        raise HTTPException(status_code=400, detail='Cannot set both a whitelist and a blacklist at the same time!')
+
+    token = request.cookies.get('session_token')
+    username = verify_access_token(token) if token else None
+
+    allowed = True
+
+    if whitelist is not None:
+        allowed_usernames = [u.strip() for u in db_secret.whitelist.split(',') if u.strip()]
+        if not username or username not in allowed_usernames:
+            allowed = False
+
+    elif blacklist is not None:
+        disallowed_usernames = [u.strip() for u in db_secret.blacklist.split(',') if u.strip()]
+        if username and username in disallowed_usernames:
+            allowed = False
+
+    if not allowed:
+        template = template_env.get_template('view.html')
+        return template.render(request=request, error='Access denied.', authorized=authorized)
 
     revealed_text = db_secret.secret_text
     db.delete(db_secret)

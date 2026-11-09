@@ -6,6 +6,39 @@
     <form action="/share" method="post">
         <label for="secret_data">Enter your secret text/password:</label><br><br>
         <textarea name="secret_data" id="secret_data" rows="4" cols="50" required></textarea><br><br>
+        <details>
+            <summary style="cursor: pointer; color: #2563eb; font-weight: bold; margin-bottom: 1rem;">
+                ⚙️ Advanced settings
+            </summary>
+            
+            <div style="background: #f9fafb; padding: 15px; border: 1px solid #e5e7eb; border-radius: 6px; margin-bottom: 1.5rem;">
+                <label for="lifespan">Link Lifespan:</label><br>
+                <select name="lifespan" id="lifespan">
+                    <option value="burn">Burn after reading</option>
+                    <option value="1h">1 Hour</option>
+                    <option value="24h">24 Hours</option>
+                    <option value="7d">7 Days</option>
+                </select>
+                <br><br>
+
+                {% if authorized %}
+                    <fieldset style="border: 1px solid #d1d5db; padding: 10px; border-radius: 4px;">
+                        <legend style="font-weight: bold; padding: 0 5px;">Access Control Rules</legend>
+                        <p style="font-size: 0.85rem; color: #6b7280; margin: 0 0 10px 0;">Enter comma-separated usernames</p>
+                        
+                        <label for="whitelist_users">Whitelist:</label><br>
+                        <input type="text" id="whitelist_users" name="whitelist" placeholder="user1, user2"><br><br>
+                        
+                        <label for="blacklist_users">Blacklist:</label><br>
+                        <input type="text" id="blacklist_users" name="blacklist" placeholder="attacker, stranger">
+                    </fieldset>
+                {% else %}
+                    <p style="font-size: 0.9rem; color: #6b7280; margin: 0;">
+                        💡 <i>Log in to restrict access to specific usernames via whitelists or blacklists.</i>
+                    </p>
+                {% endif %}
+            </div>
+        </details>
         <button type="submit">Generate Secure Link</button>
     </form>
 
