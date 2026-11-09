@@ -54,6 +54,9 @@ def share_secret(
     if not secret_data.strip():
         raise HTTPException(status_code=400, detail='Status code cannot be empty')
 
+    if whitelist and blacklist:
+        raise HTTPException(status_code=400, detail='Cannot set both a whitelist and a blacklist at the same time!')
+
     durations = {'1h': timedelta(hours=1), '24h': timedelta(hours=24), '7d': timedelta(days=7)}
     expires_at = (None if lifespan == 'burn' else datetime.now(timezone.utc) + durations[lifespan])
 
@@ -100,20 +103,17 @@ def view_secret(request: Request, secret_id: str, db: Session = Depends(get_db))
     whitelist = (db_secret.whitelist or '').strip()
     blacklist = (db_secret.blacklist or '').strip()
 
-    if whitelist and blacklist:
-        raise HTTPException(status_code=400, detail='Cannot set both a whitelist and a blacklist at the same time!')
-
     token = request.cookies.get('session_token')
     username = verify_access_token(token) if token else None
 
     allowed = True
 
-    if whitelist is not None:
+    if whitelist:
         allowed_usernames = [u.strip() for u in db_secret.whitelist.split(',') if u.strip()]
         if not username or username not in allowed_usernames:
             allowed = False
 
-    elif blacklist is not None:
+    elif blacklist:
         disallowed_usernames = [u.strip() for u in db_secret.blacklist.split(',') if u.strip()]
         if username and username in disallowed_usernames:
             allowed = False
@@ -226,14 +226,17 @@ def logout(request: Request):
     return response
 
 @app.get('/dashboard/secrets', response_class=HTMLResponse)
-def dashboard_secrets(request: Request):
+def dashboard_secrets(request: Request, db: Session = Depends(get_db)):
     authorized = is_auth(request)
 
     if not authorized:
         template = template_env.get_template('auth/login.html')
         return template.render(request=request, error='Unathorized access. Please log in first.')
 
-    active_secrets = []
+    token = request.cookies.get('session_token')
+    username = verify_access_token(token) if token else None
+
+    active_secrets = db.query(models.Secret).filter(models.User.username == username).all()
 
     template = template_env.get_template('dashboard/secrets.html')
     return template.render(request=request, authorized=authorized, secrets=active_secrets)
@@ -262,6 +265,26 @@ def dashboard_settings(request: Request):
 
     template = template_env.get_template('dashboard/settings.html')
     return template.render(request=request, authorized=authorized)
+
+@app.get('/shred/{secret_id}')
+def shred_secret(request: Request, db: Session = Depends(get_db)):
+    authorized = is_auth(request)
+
+    if not authorized:
+        template = template_env.get_template('auth/login.html')
+        return template.render(request=request, error='Unathorized access. Please log in first.')
+
+    token = request.cookies.get('session_token')
+    username = verify_access_token(token) if token else None
+
+    db_secret = db.query(models.Secret).filter(models.User.username == username).first()
+
+    if db_secret:
+        db.delete(db_secret)
+        db.commit()
+
+    response = RedirectResponse('/dashboard/secrets', status_code=303)
+    return response
 
 @app.get('/dashboard/change-password')
 def dashboard_password(request: Request):
@@ -299,4 +322,4 @@ def handle_change_password(request: Request, password: str = Form(...), new_pass
     return HTMLResponse(content=template.render(request=request, authorized=True, success_message='Password changed successfully.'))
 
 if __name__ == '__main__':
-    uvicorn.run('main:app', host='127.0.0.1', port=8000, reload=True)
+    uvicorn.run('main:app', host='192.168.0.111', port=8000, reload=True)
