@@ -6,7 +6,6 @@ from fastapi.responses import HTMLResponse, RedirectResponse
 from sqlalchemy import DateTime
 from sqlalchemy.orm import Session
 from dotenv import load_dotenv
-from sqlalchemy.sql.functions import now
 import uvicorn
 import jinja2
 import os
@@ -29,18 +28,21 @@ fernet = Fernet(key)
 
 app = FastAPI()
 
-def is_auth(request: Request):
+def is_auth(request: Request) -> bool:
     token = request.cookies.get('session_token')
     username = verify_access_token(token) if token else None
     is_auth = True if username else False
     return is_auth
+
+def is_dark_mode(request: Request) -> bool:
+    return request.cookies.get('theme') == 'dark'
 
 @app.get('/', response_class=HTMLResponse)
 def home(request: Request):
     authorized = is_auth(request)
 
     template = template_env.get_template('index.html')
-    return template.render(request=request, authorized=authorized)
+    return template.render(request=request, authorized=authorized, dark_mode=is_dark_mode(request))
 
 @app.post('/share', response_class=HTMLResponse)
 def share_secret(
@@ -76,7 +78,7 @@ def share_secret(
     share_link= f'{base_url}secret/{db_secret.id}'
 
     template = template_env.get_template('index.html')
-    return template.render(request=request, share_link=share_link, authorized=authorized)
+    return template.render(request=request, share_link=share_link, authorized=authorized, dark_mode=is_dark_mode(request))
 
 @app.get('/secret/{secret_id}', response_class=HTMLResponse)
 def view_secret(request: Request, secret_id: str, db: Session = Depends(get_db)):
@@ -86,7 +88,7 @@ def view_secret(request: Request, secret_id: str, db: Session = Depends(get_db))
 
     if not db_secret:
         template = template_env.get_template('view.html')
-        return template.render(request=request, error='This secret has already been destroyed or never existed!', authorized=authorized)
+        return template.render(request=request, error='This secret has already been destroyed or never existed!', authorized=authorized, dark_mode=is_dark_mode(request))
 
     expire_time = db_secret.expires_at
 
@@ -98,7 +100,7 @@ def view_secret(request: Request, secret_id: str, db: Session = Depends(get_db))
             db.delete(db_secret)
             db.commit()
             template = template_env.get_template('view.html')
-            return template.render(request=request, error='This secret has expired.', authorized=authorized)
+            return template.render(request=request, error='This secret has expired.', authorized=authorized, dark_mode=is_dark_mode(request))
 
     whitelist = (db_secret.whitelist or '').strip()
     blacklist = (db_secret.blacklist or '').strip()
@@ -120,7 +122,7 @@ def view_secret(request: Request, secret_id: str, db: Session = Depends(get_db))
 
     if not allowed:
         template = template_env.get_template('view.html')
-        return template.render(request=request, error='Access denied.', authorized=authorized)
+        return template.render(request=request, error='Access denied.', authorized=authorized, dark_mode=is_dark_mode(request))
 
     revealed_text = db_secret.secret_text
     db.delete(db_secret)
@@ -129,7 +131,7 @@ def view_secret(request: Request, secret_id: str, db: Session = Depends(get_db))
     decrypted_text = fernet.decrypt(revealed_text).decode('utf-8') #type: ignore
 
     template = template_env.get_template('view.html')
-    return template.render(request=request, secret_text=decrypted_text, authorized=authorized)
+    return template.render(request=request, secret_text=decrypted_text, authorized=authorized, dark_mode=is_dark_mode(request))
 
 @app.get('/register', response_class=HTMLResponse)
 def auth_register(request: Request):
@@ -140,7 +142,7 @@ def auth_register(request: Request):
         return response
         
     template = template_env.get_template('auth/register.html')
-    return template.render(request=request)
+    return template.render(request=request, dark_mode=is_dark_mode(request))
 
 @app.get('/login', response_class=HTMLResponse)
 def auth_login(request: Request):
@@ -151,7 +153,7 @@ def auth_login(request: Request):
         return response
 
     template = template_env.get_template('auth/login.html')
-    return template.render(request=request)
+    return template.render(request=request, dark_mode=is_dark_mode(request))
 
 @app.post('/register')
 def handle_registration(request: Request, username: str = Form(...), password: str = Form(...), password_repeat: str = Form(...), db: Session = Depends(get_db)):
@@ -217,7 +219,7 @@ def dashboard(request: Request):
     username = verify_access_token(token) if token else None
 
     template = template_env.get_template('dashboard/menu.html')
-    return template.render(request=request, current_user=username, authorized=authorized)
+    return template.render(request=request, current_user=username, authorized=authorized, dark_mode=is_dark_mode(request))
 
 @app.get('/logout')
 def logout(request: Request):
@@ -239,7 +241,7 @@ def dashboard_secrets(request: Request, db: Session = Depends(get_db)):
     active_secrets = db.query(models.Secret).filter(models.User.username == username).all()
 
     template = template_env.get_template('dashboard/secrets.html')
-    return template.render(request=request, authorized=authorized, secrets=active_secrets)
+    return template.render(request=request, authorized=authorized, dark_mode=is_dark_mode(request), secrets=active_secrets)
 
 @app.get('/dashboard/account', response_class=HTMLResponse)
 def dashboard_account(request: Request):
@@ -253,7 +255,7 @@ def dashboard_account(request: Request):
     username = verify_access_token(token) if token else None
 
     template = template_env.get_template('dashboard/account.html')
-    return template.render(request=request, current_user=username, authorized=authorized)
+    return template.render(request=request, current_user=username, authorized=authorized, dark_mode=is_dark_mode(request))
 
 @app.get('/dashboard/settings', response_class=HTMLResponse)
 def dashboard_settings(request: Request):
@@ -264,7 +266,24 @@ def dashboard_settings(request: Request):
         return template.render(request=request, error='Unathorized access. Please log in first.')
 
     template = template_env.get_template('dashboard/settings.html')
-    return template.render(request=request, authorized=authorized)
+    return template.render(request=request, authorized=authorized, dark_mode=is_dark_mode(request))
+
+@app.post('/dashboard/settings', response_class=HTMLResponse)
+def toggle_settings(request: Request, dark_mode: str | None = Form(default=None)):
+    authorized = is_auth(request)
+
+    if not authorized:
+        template = template_env.get_template('auth/login.html')
+        return template.render(request=request, error='Unathorized access. Please log in first.')
+
+    response = RedirectResponse('/dashboard/settings', status_code=303)
+
+    if dark_mode == 'on':
+        response.set_cookie(key='theme', value='dark', httponly=True, samesite='lax', max_age=31536000)
+    else:
+        response.set_cookie(key='theme', value='light', httponly=True, samesite='lax', max_age=31536000)
+
+    return response
 
 @app.get('/shred/{secret_id}')
 def shred_secret(request: Request, db: Session = Depends(get_db)):
@@ -295,7 +314,7 @@ def dashboard_password(request: Request):
         return HTMLResponse(content=template.render(request=request, error='Unathorized access. Please log in first.'))
 
     template = template_env.get_template('dashboard/password.html')
-    return HTMLResponse(content=template.render(request=request, authorized=authorized))
+    return HTMLResponse(content=template.render(request=request, authorized=authorized, dark_mode=is_dark_mode(request)))
 
 @app.post('/dashboard/change-password', response_class=HTMLResponse)
 def handle_change_password(request: Request, password: str = Form(...), new_password: str = Form(...), new_password_repeat: str = Form(...), db: Session = Depends(get_db)):

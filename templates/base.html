@@ -4,8 +4,60 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Saturn Secrets</title>
+
+    <style>
+        body {
+            background-color: #ffffff;
+            color: #111827;
+            font-family: system-ui, -apple-system, sans-serif;
+            margin: 0.5rem;
+            transition: background-color 0.2s, color 0.2s;
+        }
+        a { color: #2563eb; }
+
+        .settings-box {
+            background-color: #f9fafb;
+            padding: 15px;
+            border: 1px solid #e5e7eb;
+            border-radius: 6px;
+            margin-bottom: 1.5rem;
+        }
+        .secret-box {
+            background-color: #f0f0f0;
+            color: #111827;
+            padding: 15px;
+            border-left: 5px solid #ef4444;
+            font-family: monospace;
+            white-space: pre-wrap;
+        }
+
+        body.dark-mode {
+            background-color: #121212;
+            color: #e5e7eb;
+        }
+        body.dark-mode a { color: #60a5fa; }
+        body.dark-mode input, 
+        body.dark-mode textarea, 
+        body.dark-mode select {
+            background-color: #1f2937;
+            color: #f9fafb;
+            border: 1px solid #374151;
+        }
+        body.dark-mode fieldset {
+            border-color: #374151;
+        }
+        body.dark-mode .settings-box {
+            background-color: #1f2937;
+            border-color: #374151;
+            color: #e5e7eb;
+        }
+        body.dark-mode .secret-box {
+            background-color: #1f2937;
+            color: #f9fafb;
+        }
+    </style>
 </head>
-<body>
+<body class="{% if dark_mode %}dark-mode{% endif %}">
     <header>
         <strong>🪐 Saturn Secrets</strong>
         <a href="/">Create Secret</a>
