@@ -1,0 +1,39 @@
+---
+- name: Deploy Saturn Secrets
+  hosts: ubuntu_server
+  become: true
+
+  tasks:
+    - name: Install Podman and podman-compose
+      apt:
+        name:
+          - podman
+          - podman-compose
+        state: present
+        update_cache: yes
+
+    - name: Create project folder
+      file:
+        path: /root/saturn-secrets
+        state: directory
+
+    - name: Create data folder for SQLite
+      file:
+        path: /root/saturn-secrets/data
+        state: directory
+
+    - name: Copy compose.yml to server
+      copy:
+        src: compose.yml
+        dest: /root/saturn-secrets/compose.yml
+
+    - name: Copy .env file to server
+      copy:
+        src: .env
+        dest: /root/saturn-secrets/.env
+        mode: "0600"
+
+    - name: Start container with podman-compose
+      command:
+        cmd: podman-compose up -d --pull always
+        chdir: /root/saturn-secrets
