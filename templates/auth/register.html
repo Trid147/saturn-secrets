@@ -16,6 +16,9 @@
         
         <label for="password_repeat">Repeat Password:</label><br>
         <input type="password" id="password_repeat" name="password_repeat" required><br><br>
+
+        <label for="captcha_answer">{{ captcha_question }}</label>
+        <input type="text" id="captcha_answer" name="captcha_answer" required placeholder="Enter the number"><br><br>
         
         <button type="submit">Register Account</button>
     </form>

@@ -2,6 +2,7 @@ import bcrypt
 from dotenv import load_dotenv
 import jwt
 import os
+import random
 from datetime import datetime, timedelta, timezone
 
 load_dotenv()
@@ -42,3 +43,27 @@ def verify_access_token(token: str) -> str | None:
         return username
     except jwt.PyJWTError:
         return None
+
+def generate_math_captcha() -> tuple[str, str]:
+    '''generates a random math question'''
+    num1 = random.randint(1, 15)
+    num2 = random.randint(1, 15)
+    question = f'What is {num1}+{num2}?'
+    answer = str(num1+num2)
+
+    expire = datetime.now(timezone.utc) + timedelta(minutes=5)
+    payload = {'captcha_ans': answer, 'exp': expire}
+    signed_token = jwt.encode(payload, SECRET_KEY, algorithm=ALGORITHM) #type: ignore
+
+    return question, signed_token
+
+def verify_math_captcha(user_answer: str, signed_token: str | None) -> bool:
+    '''checks the user_input and signed_token sameness'''
+    if not user_answer or not signed_token:
+        return False
+    try:
+        payload = jwt.decode(signed_token, SECRET_KEY, algorithms=ALGORITHM) #type: ignore
+        expected_answer = payload.get('captcha_ans')
+        return user_answer.strip() == expected_answer
+    except jwt.PyJWTError:
+        return False

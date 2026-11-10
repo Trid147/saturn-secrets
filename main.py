@@ -3,7 +3,6 @@ from typing import Literal
 from fastapi import Depends, FastAPI, Form, HTTPException, Request
 from cryptography.fernet import Fernet
 from fastapi.responses import HTMLResponse, RedirectResponse
-from sqlalchemy import DateTime
 from sqlalchemy.orm import Session
 from dotenv import load_dotenv
 import uvicorn
@@ -12,7 +11,7 @@ import os
 
 import models
 from database import engine, get_db
-from security import hash_password, verify_password, create_access_token, verify_access_token
+from security import generate_math_captcha, hash_password, verify_password, create_access_token, verify_access_token, verify_math_captcha
 
 models.Base.metadata.create_all(bind=engine)
 
@@ -141,8 +140,13 @@ def auth_register(request: Request):
         response = RedirectResponse(url='/dashboard', status_code=303)
         return response
         
+    question, captcha_token = generate_math_captcha()
     template = template_env.get_template('auth/register.html')
-    return template.render(request=request, dark_mode=is_dark_mode(request))
+
+    response = HTMLResponse(content=template.render(request=request, captcha_question=question, dark_mode=is_dark_mode(request)))
+    response.set_cookie(key='captcha_token', value=captcha_token, httponly=True, samesite='lax', max_age=300)
+
+    return response
 
 @app.get('/login', response_class=HTMLResponse)
 def auth_login(request: Request):
@@ -156,33 +160,47 @@ def auth_login(request: Request):
     return template.render(request=request, dark_mode=is_dark_mode(request))
 
 @app.post('/register')
-def handle_registration(request: Request, username: str = Form(...), password: str = Form(...), password_repeat: str = Form(...), db: Session = Depends(get_db)):
+def handle_registration(request: Request, username: str = Form(...), password: str = Form(...), password_repeat: str = Form(...), captcha_answer: str = Form(...), db: Session = Depends(get_db)):
+    template = template_env.get_template('auth/register.html')
+    dark = is_dark_mode(request)
+
+    def render_error(error_msg: str):
+        new_q, new_tok = generate_math_captcha()
+        resp = HTMLResponse(content=template.render(
+            request=request, error=error_msg, captcha_question=new_q, dark_mode=dark
+        ))
+        resp.set_cookie(key='captcha_token', value=new_tok, httponly=True, samesite='lax', max_age=300)
+        return resp
+
+    captcha_token = request.cookies.get('captcha_token')
+    if not verify_math_captcha(captcha_answer, captcha_token):
+        return render_error('Incorrect security math answer or challenge expired!')
+
     if password != password_repeat:
-        template = template_env.get_template('auth/register.html')
-        return HTMLResponse(content=template.render(request=request, error='Passwords do not match!'))
-
+        return render_error('Passwords do not match!')
     if len(password) < 8:
-        template = template_env.get_template('auth/register.html') 
-        return HTMLResponse(content=template.render(request=request, error='Password must contain at least 8 characters!'))
-
+        return render_error('Password must contain at least 8 characters!')
     if not username.strip():
-        template = template_env.get_template('auth/register.html')
-        return HTMLResponse(content=template.render(request=request, error='Username can not be blank!'))
+        return render_error('Username cannot be blank!')
 
     existing_user = db.query(models.User).filter(models.User.username == username).first()
     if existing_user:
-        template = template_env.get_template('auth/register.html')
-        return HTMLResponse(content=template.render(request=request, error='This user is already registered!'))
+        return render_error('This user is already registered!')
 
     hashed_password = hash_password(password)
-
     new_user = models.User(username=username, hashed_password=hashed_password)
     db.add(new_user)
     db.commit()
     db.refresh(new_user)
 
-    template = template_env.get_template('auth/login.html')
-    return HTMLResponse(content=template.render(request=request, success_message='Account created successsfully! Please log in.'))
+    login_template = template_env.get_template('auth/login.html')
+    response = HTMLResponse(content=login_template.render(
+        request=request, 
+        success_message='Account created successfully! Please log in.',
+        dark_mode=dark
+    ))
+    response.delete_cookie('captcha_token')
+    return response
 
 @app.post('/login', response_class=HTMLResponse)
 def handle_login(request: Request, username: str = Form(...), password: str = Form(...), db: Session = Depends(get_db)):
@@ -341,4 +359,4 @@ def handle_change_password(request: Request, password: str = Form(...), new_pass
     return HTMLResponse(content=template.render(request=request, authorized=True, success_message='Password changed successfully.'))
 
 if __name__ == '__main__':
-    uvicorn.run('main:app', host='192.168.0.111', port=8000, reload=True)
+    uvicorn.run('main:app', host='0.0.0.0', port=8000, reload=True)
