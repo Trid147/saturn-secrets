@@ -20,7 +20,9 @@ template_env = jinja2.Environment(loader=template_loader, autoescape=jinja2.sele
 
 load_dotenv()
 
-key = os.getenv("SECRET_KEY")
+#variables from .env file
+key = os.getenv('SECRET_KEY')
+https = os.getenv('HTTPS_ENABLED', 'false').lower() == 'true'
 if key is None:
     raise RuntimeError('"SECRET KEY environmental variable is not set"')
 fernet = Fernet(key)
@@ -144,7 +146,7 @@ def auth_register(request: Request):
     template = template_env.get_template('auth/register.html')
 
     response = HTMLResponse(content=template.render(request=request, captcha_question=question, dark_mode=is_dark_mode(request)))
-    response.set_cookie(key='captcha_token', value=captcha_token, httponly=True, samesite='lax', max_age=300)
+    response.set_cookie(key='captcha_token', value=captcha_token, httponly=True, secure=https, samesite='lax', max_age=300)
 
     return response
 
@@ -169,7 +171,7 @@ def handle_registration(request: Request, username: str = Form(...), password: s
         resp = HTMLResponse(content=template.render(
             request=request, error=error_msg, captcha_question=new_q, dark_mode=dark
         ))
-        resp.set_cookie(key='captcha_token', value=new_tok, httponly=True, samesite='lax', max_age=300)
+        resp.set_cookie(key='captcha_token', value=new_tok, httponly=True, secure=https, samesite='lax', max_age=300)
         return resp
 
     captcha_token = request.cookies.get('captcha_token')
@@ -221,7 +223,7 @@ def handle_login(request: Request, username: str = Form(...), password: str = Fo
 
     response = RedirectResponse(url='/dashboard', status_code=303)
 
-    response.set_cookie(key='session_token', value=token, httponly=True, secure=False, samesite='lax')
+    response.set_cookie(key='session_token', value=token, httponly=True, secure=https, samesite='lax')
 
     return response
 
@@ -297,9 +299,9 @@ def toggle_settings(request: Request, dark_mode: str | None = Form(default=None)
     response = RedirectResponse('/dashboard/settings', status_code=303)
 
     if dark_mode == 'on':
-        response.set_cookie(key='theme', value='dark', httponly=True, samesite='lax', max_age=31536000)
+        response.set_cookie(key='theme', value='dark', httponly=True, secure=https, samesite='lax', max_age=31536000)
     else:
-        response.set_cookie(key='theme', value='light', httponly=True, samesite='lax', max_age=31536000)
+        response.set_cookie(key='theme', value='light', httponly=True, secure=https, samesite='lax', max_age=31536000)
 
     return response
 

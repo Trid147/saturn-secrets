@@ -32,8 +32,43 @@
         src: .env
         dest: /root/saturn-secrets/.env
         mode: "0600"
+    
+    - name: Pull latest version from GitHub
+      command:
+        cmd: podman-compose pull
+        chdir: /root/saturn-secrets
+
+    - name: Allow 443 HTTPS port
+      ufw:
+        rule: allow
+        port: "443"
+        proto: tcp
 
     - name: Start container with podman-compose
       command:
-        cmd: podman-compose up -d --pull always
+        cmd: podman-compose up -d
         chdir: /root/saturn-secrets
+
+    - name: Copy Nginx config
+      copy:
+        src: nginx.conf
+        dest: /etc/nginx/sites-available/default
+        force: no
+
+    - name: Reload Nginx
+      service:
+        name: nginx
+        state: reloaded
+
+    - name: Install Certbot for Nginx
+      apt:
+        name:
+          - certbot
+          - python3-certbot-nginx
+        state: present
+
+    - name: Obtain and configure free Let's Encrypt HTTPS certificate
+      command:
+        cmd: certbot --nginx -d saturn-secrets.ru -d www.saturn-secrets.ru --non-interactive --agree-tos -m tttttddddd@gmail.com --redirect
+      args:
+        creates: /etc/letsencrypt/live/saturn-secrets.ru/fullchain.pem
