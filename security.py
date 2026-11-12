@@ -27,7 +27,7 @@ def verify_password(password: str, hash: str):
 
 def create_access_token(username: str) -> str:
     '''generates secure jwt session token'''
-    expire = datetime.now(timezone.utc) + timedelta(hours=72)
+    expire = datetime.now(timezone.utc) + timedelta(days=30)
     payload = {'sub': username, 'exp': expire}
 
     encoded_jwt = jwt.encode(payload, SECRET_KEY, algorithm=ALGORITHM) #type: ignore

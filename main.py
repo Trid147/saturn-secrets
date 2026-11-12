@@ -12,6 +12,7 @@ import os
 import models
 from database import engine, get_db
 from security import generate_math_captcha, hash_password, verify_password, create_access_token, verify_access_token, verify_math_captcha
+from fastapi.staticfiles import StaticFiles
 
 models.Base.metadata.create_all(bind=engine)
 
@@ -28,6 +29,8 @@ if key is None:
 fernet = Fernet(key)
 
 app = FastAPI()
+
+app.mount('/static', StaticFiles(directory='static'), name='static')
 
 def is_auth(request: Request) -> bool:
     token = request.cookies.get('session_token')
@@ -223,7 +226,7 @@ def handle_login(request: Request, username: str = Form(...), password: str = Fo
 
     response = RedirectResponse(url='/dashboard', status_code=303)
 
-    response.set_cookie(key='session_token', value=token, httponly=True, secure=https, samesite='lax')
+    response.set_cookie(key='session_token', value=token, httponly=True, secure=https, samesite='lax', max_age=2592000)
 
     return response
 
