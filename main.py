@@ -365,5 +365,26 @@ def handle_change_password(request: Request, password: str = Form(...), new_pass
     existing_user.hashed_password = hash_password(new_password) #type: ignore
     return HTMLResponse(content=template.render(request=request, authorized=True, success_message='Password changed successfully.'))
 
+@app.get('/dashboard/secret/{secret_id}', response_class=HTMLResponse)
+def view_own_secret(request: Request, secret_id: str, db: Session = Depends(get_db)):
+    authorized = is_auth(request)
+
+    if not authorized:
+        template = template_env.get_template('auth/login.html')
+        return template.render(request=request, error='Unathorized access. Please log in first.')
+
+    token = request.cookies.get('session_token')
+    username = verify_access_token(token) if token else None
+
+    db_secret = db.query(models.Secret).filter(models.Secret.id == secret_id).first()
+
+    if not db_secret or db_secret.owner_username != username: #type: ignore
+        raise HTTPException(status_code=403, detail='Not authorized to view this secret!')
+
+    decrypted_text = fernet.decrypt(db_secret.secret_text).decode('utf-8') #type: ignore
+
+    template = template_env.get_template('secret.html')
+    return template.render(request=request, secret_text=decrypted_text, authorized=authorized, dark_mode=is_dark_mode(request))
+
 if __name__ == '__main__':
     uvicorn.run('main:app', host='0.0.0.0', port=8000, reload=True)
