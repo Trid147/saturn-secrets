@@ -44,10 +44,10 @@ def is_dark_mode(request: Request) -> bool:
 def format_expiration_time(expires_at) -> str:
     if not expires_at:
         return 'Burn after reading'
-    now = datetime.now()
+    now = datetime.now(timezone.utc)
     if expires_at.tzinfo is None:
         expires_at = expires_at.replace(tzinfo=timezone.utc)
-    diff = now - expires_at
+    diff = expires_at - now
     total_seconds = int(diff.total_seconds())
     if total_seconds <= 0:
         return 'Expired'
@@ -59,6 +59,8 @@ def format_expiration_time(expires_at) -> str:
     if hours > 0:
         return f'Expires in {hours}h {minutes}m'
     return f'Expires in {minutes}m'
+
+template_env.globals['format_expiration_time'] = format_expiration_time
 
 @app.get('/', response_class=HTMLResponse)
 def home(request: Request):
