@@ -2,7 +2,7 @@ name: DevSecOps CI/CD Pipeline
 
 on:
   push:
-    branches: ["**"]
+    branches: ["main"]
   pull_request:
     branches: ["main"]
 
@@ -26,7 +26,7 @@ jobs:
           pip install ruff bandit
 
       - name: Run Ruff (Syntax & Code Linting)
-        run: ruff check . --select=E9,F63,F7,F82,F401 --show-source
+        run: ruff check . --select=E9,F63,F7,F82,F401
 
       - name: Run Bandit (SAST Security Scan)
         run: bandit -r . -x ./.venv,./venv -ll
@@ -44,7 +44,7 @@ jobs:
         run: docker build -t saturn-secrets:ci-test .
 
       - name: Run Trivy Vulnerability Scanner
-        uses: aquasecurity/trivy-action@0.28.0
+        uses: aquasecurity/trivy-action@v0.36.0
         with:
           image-ref: "saturn-secrets:ci-test"
           format: "table"

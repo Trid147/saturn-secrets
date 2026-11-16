@@ -410,4 +410,5 @@ def view_own_secret(request: Request, secret_id: str, db: Session = Depends(get_
     return template.render(request=request, secret_text=decrypted_text, authorized=authorized, dark_mode=is_dark_mode(request))
 
 if __name__ == '__main__':
-    uvicorn.run('main:app', host='0.0.0.0', port=8000, reload=True)
+    bind_host = os.getenv('HOST', '127.0.0.1')
+    uvicorn.run('main:app', host=bind_host, port=8000)
