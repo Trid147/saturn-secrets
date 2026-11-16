@@ -260,8 +260,10 @@ def dashboard_secrets(request: Request, db: Session = Depends(get_db)):
 
     token = request.cookies.get('session_token')
     username = verify_access_token(token) if token else None
+    if not username:
+        return RedirectResponse(url='/login', status_code=303)
 
-    active_secrets = db.query(models.Secret).filter(models.User.username == username).all()
+    active_secrets = db.query(models.Secret).filter(models.Secret.owner_username == username).all()
 
     template = template_env.get_template('dashboard/secrets.html')
     return template.render(request=request, authorized=authorized, dark_mode=is_dark_mode(request), secrets=active_secrets)
