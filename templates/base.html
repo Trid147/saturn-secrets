@@ -1,65 +1,51 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" data-theme="{{ 'dark' if dark_mode else 'light' }}">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Saturn Secrets</title>
 
-    <style>
-        body {
-            background-color: #ffffff;
-            color: #111827;
-            font-family: system-ui, -apple-system, sans-serif;
-            margin: 0.5rem;
-            transition: background-color 0.2s, color 0.2s;
-        }
-        a { color: #2563eb; }
+    <link rel="icon" type="image/svg+xml" href="/static/saturn.svg?v=2">
+    <link rel="stylesheet" href="/static/pico.min.css">
 
+    <style>
+        [data-theme="dark"] {
+            --pico-background-color: #0b0d1e;
+            --pico-card-background-color: #131633;
+            --pico-form-element-background-color: #131633;
+            --pico-form-element-border-color: #2e3466;
+            --pico-primary: #facc15;
+            --pico-primary-background: #facc15;
+            --pico-primary-border: #eab308;
+            --pico-primary-hover: #fde047;
+            --pico-primary-hover-background: #fde047;
+            --pico-primary-inverse: #0b0d1e;
+        }
+
+        body {
+            max-width: 750px;
+            margin: 0 auto;
+            padding: 1rem;
+        }
+        header a { margin-right: 12px; }
         .settings-box {
-            background-color: #f9fafb;
             padding: 15px;
-            border: 1px solid #e5e7eb;
-            border-radius: 6px;
+            border: 1px solid var(--pico-muted-border-color);
+            border-radius: 8px;
             margin-bottom: 1.5rem;
         }
         .secret-box {
-            background-color: #f0f0f0;
-            color: #111827;
             padding: 15px;
-            border-left: 5px solid #ef4444;
+            border-left: 5px solid #facc15;
+            background-color: var(--pico-card-background-color);
             font-family: monospace;
             white-space: pre-wrap;
         }
-
-        body.dark-mode {
-            background-color: #121212;
-            color: #e5e7eb;
-        }
-        body.dark-mode a { color: #60a5fa; }
-        body.dark-mode input, 
-        body.dark-mode textarea, 
-        body.dark-mode select {
-            background-color: #1f2937;
-            color: #f9fafb;
-            border: 1px solid #374151;
-        }
-        body.dark-mode fieldset {
-            border-color: #374151;
-        }
-        body.dark-mode .settings-box {
-            background-color: #1f2937;
-            border-color: #374151;
-            color: #e5e7eb;
-        }
-        body.dark-mode .secret-box {
-            background-color: #1f2937;
-            color: #f9fafb;
-        }
     </style>
 </head>
-<body class="{% if dark_mode %}dark-mode{% endif %}">
+<body>
     <header>
-        <strong>🪐 Saturn Secrets</strong>
+        <strong style="color: #facc15; margin-right: 15px;">🪐 Saturn Secrets</strong>
         <a href="/">Create Secret</a>
         {% if not authorized %}
             <a href="/login">Login</a>
@@ -76,7 +62,7 @@
 
     <footer>
         <hr>
-        <p>Contact / Support: @trid_doe (Telegram)</p>
+        <small>Contact / Support: @trid_doe (Telegram)</small>
     </footer>
 </body>
 </html>

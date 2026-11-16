@@ -46,7 +46,7 @@
 
     - name: Start container with podman-compose
       command:
-        cmd: podman-compose up -d
+        cmd: podman-compose up -d --force-recreate
         chdir: /root/saturn-secrets
 
     - name: Copy Nginx config

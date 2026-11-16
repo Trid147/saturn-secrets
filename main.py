@@ -12,6 +12,7 @@ import os
 import models
 from database import engine, get_db
 from security import generate_math_captcha, hash_password, verify_password, create_access_token, verify_access_token, verify_math_captcha
+from fastapi.staticfiles import StaticFiles
 
 models.Base.metadata.create_all(bind=engine)
 
@@ -29,6 +30,8 @@ fernet = Fernet(key)
 
 app = FastAPI()
 
+app.mount('/static', StaticFiles(directory='static'), name='static')
+
 def is_auth(request: Request) -> bool:
     token = request.cookies.get('session_token')
     username = verify_access_token(token) if token else None
@@ -37,6 +40,27 @@ def is_auth(request: Request) -> bool:
 
 def is_dark_mode(request: Request) -> bool:
     return request.cookies.get('theme') == 'dark'
+
+def format_expiration_time(expires_at) -> str:
+    if not expires_at:
+        return 'Burn after reading'
+    now = datetime.now(timezone.utc)
+    if expires_at.tzinfo is None:
+        expires_at = expires_at.replace(tzinfo=timezone.utc)
+    diff = expires_at - now
+    total_seconds = int(diff.total_seconds())
+    if total_seconds <= 0:
+        return 'Expired'
+    days, rem = divmod(total_seconds, 86400)
+    hours, rem = divmod(rem, 3600)
+    minutes, _ = divmod(rem, 60)
+    if days > 0:
+        return f'Expires in {days}d {hours}h'
+    if hours > 0:
+        return f'Expires in {hours}h {minutes}m'
+    return f'Expires in {minutes}m'
+
+template_env.globals['format_expiration_time'] = format_expiration_time
 
 @app.get('/', response_class=HTMLResponse)
 def home(request: Request):
@@ -223,7 +247,7 @@ def handle_login(request: Request, username: str = Form(...), password: str = Fo
 
     response = RedirectResponse(url='/dashboard', status_code=303)
 
-    response.set_cookie(key='session_token', value=token, httponly=True, secure=https, samesite='lax')
+    response.set_cookie(key='session_token', value=token, httponly=True, secure=https, samesite='lax', max_age=2592000)
 
     return response
 
@@ -257,8 +281,10 @@ def dashboard_secrets(request: Request, db: Session = Depends(get_db)):
 
     token = request.cookies.get('session_token')
     username = verify_access_token(token) if token else None
+    if not username:
+        return RedirectResponse(url='/login', status_code=303)
 
-    active_secrets = db.query(models.Secret).filter(models.User.username == username).all()
+    active_secrets = db.query(models.Secret).filter(models.Secret.owner_username == username).all()
 
     template = template_env.get_template('dashboard/secrets.html')
     return template.render(request=request, authorized=authorized, dark_mode=is_dark_mode(request), secrets=active_secrets)
@@ -306,7 +332,7 @@ def toggle_settings(request: Request, dark_mode: str | None = Form(default=None)
     return response
 
 @app.get('/shred/{secret_id}')
-def shred_secret(request: Request, db: Session = Depends(get_db)):
+def shred_secret(request: Request, secret_id: str, db: Session = Depends(get_db)):
     authorized = is_auth(request)
 
     if not authorized:
@@ -316,11 +342,13 @@ def shred_secret(request: Request, db: Session = Depends(get_db)):
     token = request.cookies.get('session_token')
     username = verify_access_token(token) if token else None
 
-    db_secret = db.query(models.Secret).filter(models.User.username == username).first()
+    db_secret = db.query(models.Secret).filter(models.Secret.id == secret_id).first()
 
-    if db_secret:
-        db.delete(db_secret)
-        db.commit()
+    if not db_secret or db_secret.owner_username != username: #type: ignore
+        raise HTTPException(status_code=403, detail='Not authorized to view this secret!')
+
+    db.delete(db_secret)
+    db.commit()
 
     response = RedirectResponse('/dashboard/secrets', status_code=303)
     return response
@@ -360,5 +388,27 @@ def handle_change_password(request: Request, password: str = Form(...), new_pass
     existing_user.hashed_password = hash_password(new_password) #type: ignore
     return HTMLResponse(content=template.render(request=request, authorized=True, success_message='Password changed successfully.'))
 
+@app.get('/dashboard/secret/{secret_id}', response_class=HTMLResponse)
+def view_own_secret(request: Request, secret_id: str, db: Session = Depends(get_db)):
+    authorized = is_auth(request)
+
+    if not authorized:
+        template = template_env.get_template('auth/login.html')
+        return template.render(request=request, error='Unathorized access. Please log in first.')
+
+    token = request.cookies.get('session_token')
+    username = verify_access_token(token) if token else None
+
+    db_secret = db.query(models.Secret).filter(models.Secret.id == secret_id).first()
+
+    if not db_secret or db_secret.owner_username != username: #type: ignore
+        raise HTTPException(status_code=403, detail='Not authorized to view this secret!')
+
+    decrypted_text = fernet.decrypt(db_secret.secret_text).decode('utf-8') #type: ignore
+
+    template = template_env.get_template('secret.html')
+    return template.render(request=request, secret_text=decrypted_text, authorized=authorized, dark_mode=is_dark_mode(request))
+
 if __name__ == '__main__':
-    uvicorn.run('main:app', host='0.0.0.0', port=8000, reload=True)
+    bind_host = os.getenv('HOST', '127.0.0.1')
+    uvicorn.run('main:app', host=bind_host, port=8000)

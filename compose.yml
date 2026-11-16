@@ -1,6 +1,6 @@
 services:
   saturn-secrets:
-    image: ghcr.io/trid147/saturn-secrets:v1
+    image: ghcr.io/trid147/saturn-secrets:latest
     container_name: saturn_secrets
     restart: unless-stopped
     ports:
