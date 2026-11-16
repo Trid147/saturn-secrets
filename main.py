@@ -41,6 +41,25 @@ def is_auth(request: Request) -> bool:
 def is_dark_mode(request: Request) -> bool:
     return request.cookies.get('theme') == 'dark'
 
+def format_expiration_time(expires_at) -> str:
+    if not expires_at:
+        return 'Burn after reading'
+    now = datetime.now()
+    if expires_at.tzinfo is None:
+        expires_at = expires_at.replace(tzinfo=timezone.utc)
+    diff = now - expires_at
+    total_seconds = int(diff.total_seconds())
+    if total_seconds <= 0:
+        return 'Expired'
+    days, rem = divmod(total_seconds, 86400)
+    hours, rem = divmod(rem, 3600)
+    minutes, _ = divmod(rem, 60)
+    if days > 0:
+        return f'Expires in {days}d {hours}h'
+    if hours > 0:
+        return f'Expires in {hours}h {minutes}m'
+    return f'Expires in {minutes}m'
+
 @app.get('/', response_class=HTMLResponse)
 def home(request: Request):
     authorized = is_auth(request)
@@ -311,7 +330,7 @@ def toggle_settings(request: Request, dark_mode: str | None = Form(default=None)
     return response
 
 @app.get('/shred/{secret_id}')
-def shred_secret(request: Request, db: Session = Depends(get_db)):
+def shred_secret(request: Request, secret_id: str, db: Session = Depends(get_db)):
     authorized = is_auth(request)
 
     if not authorized:
@@ -321,11 +340,13 @@ def shred_secret(request: Request, db: Session = Depends(get_db)):
     token = request.cookies.get('session_token')
     username = verify_access_token(token) if token else None
 
-    db_secret = db.query(models.Secret).filter(models.User.username == username).first()
+    db_secret = db.query(models.Secret).filter(models.Secret.id == secret_id).first()
 
-    if db_secret:
-        db.delete(db_secret)
-        db.commit()
+    if not db_secret or db_secret.owner_username != username: #type: ignore
+        raise HTTPException(status_code=403, detail='Not authorized to view this secret!')
+
+    db.delete(db_secret)
+    db.commit()
 
     response = RedirectResponse('/dashboard/secrets', status_code=303)
     return response
